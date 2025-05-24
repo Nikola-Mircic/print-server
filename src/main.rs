@@ -3,10 +3,18 @@ use std::net::SocketAddr;
 use axum_server::*;
 
 mod api;
+mod error;
+mod config;
+
+use config::*;
 
 #[tokio::main]
 async fn main() {
-    let addr = SocketAddr::from(([0, 0, 0, 0], 1653));
+    let addr = config().SERVER_ADDR.parse::<SocketAddr>()
+                            .unwrap_or_else(|_| {
+                                panic!("Invalid address format: {}", config().SERVER_ADDR);
+                            });
+
     println!("Listening on http://{}", addr);
 
     let router = api::get_router(&addr);

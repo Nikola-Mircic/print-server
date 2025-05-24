@@ -12,9 +12,14 @@
 			<h1>WLAN Printer</h1>
 		</header>
 		<div class="container">
-			<form id="printerForm" method="get" action="/print">
+			<form
+				id="printerForm"
+				method="post"
+				action="/print"
+				enctype="multipart/form-data"
+			>
 				<label for="printerName">Printer Name:</label>
-				<select id="printerName" name="printerName" required></select>
+				<select id="printerName" name="printerName"></select>
 
 				<label for="documentFile">Select Document to Print:</label>
 				<input

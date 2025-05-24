@@ -1,7 +1,13 @@
-use std::net::SocketAddr;
+use std::{fs, io::Write, net::SocketAddr};
 
-use axum::{extract::Path, http::{HeaderMap, HeaderValue, Method}, response::{Html, IntoResponse}, routing::get, Router};
+use axum::{extract::{Multipart, Path}, 
+           http::{HeaderMap, HeaderValue, Method},
+           response::{Html, IntoResponse, Redirect}, 
+           routing::{get, post}, 
+           Router};
 use tower_http::cors::CorsLayer;
+
+use crate::error::*;
 
 async fn main_page() -> Html<&'static str>{
     Html(include_str!("../../web/index.html"))
@@ -40,6 +46,39 @@ async fn assets(Path(path): Path<String>) -> impl IntoResponse {
     response.into_response()
 }
 
+async fn file_receiver(mut file: Multipart) -> impl IntoResponse{
+    while let Some(field) = file.next_field().await.unwrap() {
+        let name = field.name().unwrap().to_string();
+        let data = field.bytes().await.unwrap();  
+
+        store_file(name, data.to_vec()).unwrap_or_else(|e| {
+            println!("Error storing file: {}", e);
+        });
+    }
+        
+    Redirect::to("/")
+}
+
+fn store_file(name: String, data: Vec<u8>) -> Result<()> {
+    let dir_path = "./upload";
+    let file_path = format!("./upload/{}", name);
+
+    fs::create_dir_all(dir_path).map_err(|_| {
+        Error::DirCreateError(dir_path.to_string())
+    })?;
+
+    let mut file = fs::File::create(&file_path).map_err(|_| {
+        Error::FileCreateError(file_path.clone())
+    })?;
+
+    file.write_all(&data).map_err(|_| {
+        Error::FileWriteError(file_path.clone())
+    })?;
+
+    Ok(())
+}
+
+
 pub fn get_router(addr: &SocketAddr) -> Router{
     let cors = CorsLayer::new()
             .allow_origin(addr.to_string().parse::<HeaderValue>().unwrap())
@@ -49,6 +88,7 @@ pub fn get_router(addr: &SocketAddr) -> Router{
                         .route("/", get(main_page))
                         .route("/favicon.ico", get(favicon))
                         .route("/assets/{path}", get(assets))
+                        .route("/print", post(file_receiver))
                         .layer(cors);
 
     router

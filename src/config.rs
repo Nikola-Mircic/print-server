@@ -20,10 +20,10 @@ pub struct Config {
 
 impl Config{
     fn load_from_env() -> Result<Self> {
-        let server_port = get_env_as::<u16>("SERVER_PORT")?;
-        let server_host= get_env("SERVER_HOST")?;
+        let server_port = get_env_as::<u16>("SERVER_PORT", "1653")?;
+        let server_host= get_env("SERVER_HOST", "0.0.0.0")?;
         
-        let upload_dir = get_env("UPLOAD_DIR").unwrap_or_else(|_| "./upload".to_string());
+        let upload_dir = get_env("UPLOAD_DIR", "/upload").unwrap_or_else(|_| "./upload".to_string());
 
         Ok(Config { 
             SERVER_ADDR: format!("{}:{}", server_host, server_port),
@@ -32,15 +32,20 @@ impl Config{
     }
 }
 
-fn get_env(name: &str) -> Result<String> {
-    std::env::var(name).map_err(|_| Error::ConfigParseError(name.to_string()))
+fn get_env(name: &str, default: &str) -> Result<String> {
+    let env = std::env::var(name).map_err(|_| Error::ConfigParseError(name.to_string()));
+    if env.is_ok() {
+        env
+    } else {
+      Ok(default.to_string())
+    }
 }
 
-fn get_env_as<T>(name: &str) -> Result<T>
+fn get_env_as<T>(name: &str, default: &str) -> Result<T>
 where
     T: std::str::FromStr,
 {
-    let value = get_env(name)?;
+    let value = get_env(name, default)?;
     value.parse::<T>()
         .map_err(|_| Error::ConfigParseError(name.to_string()))
 }

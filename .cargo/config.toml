@@ -1,3 +1,4 @@
 [env]
 SERVER_PORT = "1653"
 SERVER_HOST = "0.0.0.0"
+UPLOAD_DIR = "/upload"

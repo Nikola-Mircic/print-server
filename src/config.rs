@@ -1,4 +1,4 @@
-use std::sync::OnceLock;
+use std::{path::PathBuf, sync::OnceLock};
 
 use crate::error::{Error, Result};
 
@@ -15,6 +15,7 @@ pub fn config() -> &'static Config {
 #[allow(non_snake_case)]
 pub struct Config {
     pub SERVER_ADDR: String,
+    pub UPLOAD_DIR: String,
 }
 
 impl Config{
@@ -22,8 +23,11 @@ impl Config{
         let server_port = get_env_as::<u16>("SERVER_PORT")?;
         let server_host= get_env("SERVER_HOST")?;
         
+        let upload_dir = get_env("UPLOAD_DIR").unwrap_or_else(|_| "./upload".to_string());
+
         Ok(Config { 
-            SERVER_ADDR: format!("{}:{}", server_host, server_port)
+            SERVER_ADDR: format!("{}:{}", server_host, server_port),
+            UPLOAD_DIR: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(upload_dir).to_string_lossy().to_string(),
         })
     }
 }

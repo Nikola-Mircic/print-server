@@ -1,13 +1,13 @@
 use std::{fs, io::Write, net::SocketAddr};
 
-use axum::{extract::{Multipart, Path}, 
-           http::{HeaderMap, HeaderValue, Method},
+use axum::{extract::{Multipart, Path, State}, 
+           http::{HeaderMap, HeaderValue, Method}, 
            response::{Html, IntoResponse, Redirect}, 
            routing::{get, post}, 
            Router};
 use tower_http::cors::CorsLayer;
 
-use crate::error::*;
+use crate::{config::config, error::*, printer::Printer};
 
 async fn main_page() -> Html<&'static str>{
     Html(include_str!("../../web/index.html"))
@@ -28,7 +28,7 @@ async fn assets(Path(path): Path<String>) -> impl IntoResponse {
     let mut headers = HeaderMap::new();
 
     let file_type = path.rsplit('.').next();
-// Remove leading slash if present
+
     match file_type {
         Some("css") => {
             headers.insert("Content-Type", HeaderValue::from_static("text/css"));
@@ -46,25 +46,31 @@ async fn assets(Path(path): Path<String>) -> impl IntoResponse {
     response.into_response()
 }
 
-async fn file_receiver(mut file: Multipart) -> impl IntoResponse{
+async fn file_receiver(State(state): State<AppState<impl Printer>>, mut file: Multipart) -> impl IntoResponse{
     while let Some(field) = file.next_field().await.unwrap() {
         let name = field.name().unwrap().to_string();
         let data = field.bytes().await.unwrap();  
 
-        store_file(name, data.to_vec()).unwrap_or_else(|e| {
+        store_file(&name, data.to_vec()).unwrap_or_else(|e| {
             println!("Error storing file: {}", e);
+        });
+
+        state.printer.print(name.clone()).unwrap_or_else(|e| {
+            println!("Error printing file: {}", e);
         });
     }
         
     Redirect::to("/")
 }
 
-fn store_file(name: String, data: Vec<u8>) -> Result<()> {
-    let dir_path = "./upload";
-    let file_path = format!("./upload/{}", name);
+fn store_file(name: &String, data: Vec<u8>) -> Result<()> {
+    let dir_path = config().UPLOAD_DIR.clone();
+    let file_path = format!("{}/{}", dir_path, name);
 
-    fs::create_dir_all(dir_path).map_err(|_| {
-        Error::DirCreateError(dir_path.to_string())
+    println!("Storing file at: {}", file_path);
+
+    fs::create_dir_all(&dir_path).map_err(|_| {
+        Error::DirCreateError(dir_path.clone())
     })?;
 
     let mut file = fs::File::create(&file_path).map_err(|_| {
@@ -78,18 +84,27 @@ fn store_file(name: String, data: Vec<u8>) -> Result<()> {
     Ok(())
 }
 
+#[derive(Clone)]
+struct AppState<PT: Printer> {
+    printer: PT
+}
 
-pub fn get_router(addr: &SocketAddr) -> Router{
+pub fn get_router<T: Printer>(addr: &SocketAddr, printer: T) -> Router{
     let cors = CorsLayer::new()
             .allow_origin(addr.to_string().parse::<HeaderValue>().unwrap())
             .allow_methods([Method::GET, Method::POST]);
 
+    println!("Generating app state with printer: {:?}", printer);
+    let state = AppState { printer };
+
+    println!("Creating router...");
     let router = Router::new()
                         .route("/", get(main_page))
                         .route("/favicon.ico", get(favicon))
                         .route("/assets/{path}", get(assets))
                         .route("/print", post(file_receiver))
-                        .layer(cors);
+                        .layer(cors)
+                        .with_state(state);
 
     router
 }
